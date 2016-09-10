@@ -1,10 +1,10 @@
-#include <linux/init.h>
-#include <linux/module.h>
+#include <linux/init.h>			//用于标记函数的宏，如__init,__exit
+#include <linux/module.h>		//将内核模块加载到内核中的核心头文件，个人认为module_init,module_exit与之相关
 #include <linux/types.h>
-#include <linux/fs.h>
+#include <linux/fs.h>			//支持linux文件系统的文件
 #include <linux/proc_fs.h>
-#include <linux/device.h>
-#include <asm/uaccess.h>
+#include <linux/device.h>		//支持内核驱动模型的头文件
+#include <asm/uaccess.h>		//复制用户用户空间函数需要的头文件
 
 #include "freg.h"
 
@@ -20,7 +20,7 @@ static int freg_release(struct inode* inode, struct file* filp);
 static ssize_t freg_read(struct file* filp, char __user *buf, size_t count, loff_t* f_pos);
 static ssize_t freg_write(struct file* filp,const char __user *buf,size_t count,loff_t* f_pos);
 
-
+// /dev/freg设备节点的操作方法
 static struct file_operations freg_fops = {
 	.owner = THIS_MODULE,
 	.open = freg_open,
@@ -40,6 +40,7 @@ static DEVICE_ATTR(val,S_IRUGO | S_IWUSR,freg_val_show,freg_val_store);
 
 /*打开设备方法*/
 static int freg_open(struct inode* inode, struct file* filp){
+	printk(KERN_ALERT"freg device open.\n");
 	struct fake_reg_dev* dev;
 
 	/*将自定义设备结构题保存在文件指针的私有数据域中，以便访问设备时可以直接拿来用*/
@@ -51,12 +52,14 @@ static int freg_open(struct inode* inode, struct file* filp){
 
 /*设备文件释放时调用，空实现*/
 static int freg_release(struct inode* inode, struct file* filp){
+	printk(KERN_ALERT"freg device release.\n");
 	return 0;
 }
 
 
 /*读取设备的寄存器val的值*/
 static ssize_t freg_read(struct file* filp, char __user *buf, size_t count, loff_t* f_pos){
+	printk(KERN_ALERT"freg device read.\n");
 	ssize_t err = 0;
 	struct fake_reg_dev* dev = filp->private_data;
 	
@@ -84,6 +87,7 @@ out:
 
 /*写设备的寄存器val的值*/
 static ssize_t freg_write(struct file* filp,const char __user *buf,size_t count,loff_t* f_pos){
+	printk(KERN_ALERT"freg device write.\n");
 	struct fake_reg_dev* dev = filp->private_data;
 	ssize_t err = 0;
 
@@ -137,24 +141,28 @@ static ssize_t __freg_set_val(struct fake_reg_dev* dev,const char* buf, size_t c
 
 	return count;
 }
-
+//读取/sys/class/freg/freg/val的方法
 static ssize_t freg_val_show(struct device* dev,struct device_attribute* attr, char* buf){
 	struct fake_reg_dev* hdev = (struct fake_reg_dev*) dev_get_drvdata(dev);
 
+	printk(KERN_ALERT"get /sys/class/freg/freg/val.\n");
 	return __freg_get_val(hdev,buf);
 }
 
 
 
+//将值写入/sys/class/freg/freg/val的方法
 static ssize_t freg_val_store(struct device* dev, struct device_attribute* attr, const char* buf, size_t count){
 	struct fake_reg_dev* hdev = (struct fake_reg_dev*) dev_get_drvdata(dev);
 
+	printk(KERN_ALERT"set /sys/class/freg/freg/val.\n");
 	return __freg_set_val(hdev,buf,count);
 }
 
 
 /*读取设备寄存器val的值，保存到page缓存区中*/
 static ssize_t freg_proc_read(char* page, char** start, off_t off,int count,int* eof, void* data){
+	printk(KERN_ALERT"freg_proc_read.\n");
 	if(off>0){
 		*eof = 1;
 		return 0;
@@ -164,6 +172,7 @@ static ssize_t freg_proc_read(char* page, char** start, off_t off,int count,int*
 
 /*把缓存区的值buff保存到设备寄存器val中*/
 static ssize_t freg_proc_write(struct file* filp, const char __user *buff, unsigned long len, void* data){
+	printk(KERN_ALERT"freg_proc_write.\n");
 	int err = 0;
 	char* page = NULL;
 
@@ -192,12 +201,14 @@ out:
 }
 
 /*创建/proc/freg文件*/
+//以及对应/proc/freg读写方法
 static void freg_create_proc(void) {
+	printk(KERN_ALERT"freg_create_proc.\n");
 	struct proc_dir_entry* entry;
 
 	entry = create_proc_entry(FREG_DEVICE_PROC_NAME,0,NULL);
 	if(entry){
-		//entry->owner = THIS_MODULE;
+		//entry->owner = THIS_MODULE;	//结构体中没有owner这个成员
 		entry->read_proc = freg_proc_read;
 		entry->write_proc = freg_proc_write;
 	}
@@ -205,6 +216,7 @@ static void freg_create_proc(void) {
 
 /*删除/proc/freg文件*/
 static void freg_remove_proc(void){
+	printk(KERN_ALERT"freg_remove_proc.\n");
 	remove_proc_entry(FREG_DEVICE_PROC_NAME,NULL);
 }
 
@@ -227,7 +239,7 @@ static int __freg_setup_dev(struct fake_reg_dev* dev){
 	}
 
 	/*初始化信号量和寄存器val的值*/
-	//init_MUTEX(&(dev->sem));
+	//init_MUTEX(&(dev->sem));	//新版本linux中初始化信号量没有这个函数，用下面这个函数替代
 	sema_init(&(dev->sem),1);
 	dev->val = 0;
 	
@@ -248,6 +260,7 @@ static int __init freg_init(void){
 		printk(KERN_ALERT"Failed to alloc char dev region.\n");
 		goto fail;
 	}
+	//将动态分配到的设备的主设备号和从设备号保存
 	freg_major = MAJOR(dev);
 	freg_minor = MINOR(dev);
 
@@ -288,6 +301,16 @@ static int __init freg_init(void){
 		goto destroy_device;
 	}
 
+	//	static inline void *dev_get_drvdata(const struct device *dev)
+	//	{
+	//		return dev->driver_data;
+	//	}
+	//
+	//	static inline void dev_set_drvdata(struct device *dev, void *data)
+	//	{
+	//		dev->driver_data = data;
+	//	}
+	//	相当于将freg_dev这个指针保存到temp中
 	dev_set_drvdata(temp, freg_dev);
 
 	/*创建/proc/freg文件*/
@@ -315,9 +338,9 @@ fail:
 
 /*模块卸载方法*/
 static void __exit freg_exit(void){
+	printk(KERN_ALERT"Destroy freg device.\n");
 	dev_t devno = MKDEV(freg_major, freg_minor);
 	
-	printk(KERN_ALERT"Destroy freg device.\n");
 
 	/*删除/proc/freg文件*/
 	freg_remove_proc();
